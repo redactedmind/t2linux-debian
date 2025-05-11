@@ -1,0 +1,6 @@
+{
+    "shellcheck.customArgs": [
+        "--shell=sh"
+    ]
+
+}

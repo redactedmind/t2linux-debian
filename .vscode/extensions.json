@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "timonwong.shellcheck",
+        "mkhl.shfmt",
+        "mhutchie.git-graph"
+    ]
+}
