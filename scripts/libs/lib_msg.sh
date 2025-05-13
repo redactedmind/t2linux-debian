@@ -1,4 +1,4 @@
-#!/bin/env sh
+# shellcheck shell=sh
 
 err() {
 	printf '%s: E: %s\n' "$SCRIPT_NAME" "$1" >&2
@@ -18,7 +18,7 @@ warnn() {
 
 die() {
 	err "$2"
-	exit $1
+	exit "$1"
 }
 
 msg() {
@@ -28,15 +28,3 @@ msg() {
 msgn() {
 	printf '%s: %s' "$SCRIPT_NAME" "$1"
 }
-
-get_req_cmds() {
-	msg 'Finding required software'
-	if ! command -v podman > /dev/null && ! command -v docker > /dev/null; then
-		die 1 'No containerization platform commands were found: "podman", "docker"'
-	fi	
-}
-
-
-SCRIPT_NAME="${0##*/}"
-get_req_cmds
-podman build 
