@@ -2,44 +2,40 @@
 
 set -euo pipefail
 
-ctr="$(buildah from "$BASE_IMG_NAME:BASE_IMG_TAG")"
+# shellcheck disable=SC2034
+SCRIPT_NAME="${BASH_SOURCE##*/}"
+SCRIPTS_DIR="${BASH_SOURCE%/*}"
+LIBS_DIR="$SCRIPTS_DIR/libs"
+ROOT_DIR="$SCRIPTS_DIR/.." # Root repo directory
+
+source "$LIBS_DIR/lib_msg.sh"
+
+
+case "$TGT_DISTRO" in
+    "debian")
+        case "$TGT_RELEASE" in
+            bookworm | trixie | bullseye)
+                [[ -v BASE_IMG_NAME ]] || BASE_IMG_NAME="$TGT_DISTRO"
+                [[ -v BASE_IMG_NAME ]] || BASE_IMG_TAG="$TGT_RELEASE"
+                
+                ;;
+            *)
+                die 1 "Build for \"$TGT_DISTRO\" distribution of \"$TGT_RELEASE\" release isn't supported"
+                ;;
+        esac
+    ;;
+    *)
+        die 1 "Build for \"$TGT_DISTRO\" distribution isn't supported"
+        ;;
+esac
+
+ctr="$(buildah from "$BASE_IMG_NAME:$BASE_IMG_TAG")"
 
 # Set noninteractive environment for apt
 buildah config --env DEBIAN_FRONTEND=noninteractive "$ctr"
 
 # Install package dependencies
-buildah run "$ctr" -- sh -c "apt-get update && \
-    apt-get install -y --no-install-recommends \
-    lsb-release \
-    build-essential \
-    fakeroot \
-    libncurses-dev \
-    bison \
-    flex \
-    libssl-dev \
-    libelf-dev \
-    openssl \
-    dkms \
-    libudev-dev \
-    libpci-dev \
-    libiberty-dev \
-    autoconf \
-    wget \
-    xz-utils \
-    git \
-    libcap-dev \
-    bc \
-    rsync \
-    cpio \
-    debhelper \
-    kernel-wedge \
-    curl \
-    gawk \
-    dwarves \
-    zstd \
-    python3 && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*"
+buildah run "$ctr" bash ./$SCRIPTS_DIR/
 
 # Set working directory
 buildah config --workingdir /root/work "$ctr"

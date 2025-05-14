@@ -9,7 +9,7 @@ is_sourced() {
     return 1 # NOT sourced
 }
 if is_sourced; then
-    printf 'E: This script isn'\''t meant to be sourced, consider executing it\n' >&2
+    echo "E: This script isn't meant to be sourced, consider executing it" >&2
     return 1
 fi
 
@@ -19,41 +19,42 @@ set -eu
 SCRIPT_NAME="${0##*/}"
 SCRIPTS_DIR="${0%/*}"
 LIBS_DIR="$SCRIPTS_DIR/libs"
-ROOT_DIR="$SCRIPTS_DIR/.."
+ROOT_DIR="$SCRIPTS_DIR/.." # Root repo directory
 CTR_OUT_DIR="$ROOT_DIR/build/ctr"
+
+BUILDAH_TAG='v1.39.3'
 
 # shellcheck disable=SC1091
 . "$LIBS_DIR/lib_msg.sh"
 
-check_req_cmds() {
+get_ctr_engine() {
     msg 'Finding required software'
     if command -v podman >/dev/null; then
-        ctr_cmd="podman"
+        CTR_ENGINE="podman"
     elif command -v docker >/dev/null; then
-        ctr_cmd="docker"
+        CTR_ENGINE="docker"
     else
         die 1 'No containerization platform commands were found: "podman", "docker"'
     fi
 }
-check_req_cmds
+get_ctr_engine
 
 run_containerized_build() {
     msg 'Building build ctr'
     mkdir -p "$CTR_OUT_DIR"
-    "$ctr_cmd" pull docker://quay.io/buildah/stable:latest
-    "$ctr_cmd" run \
+    "$CTR_ENGINE" pull "docker://quay.io/buildah/stable:$BUILDAH_TAG"
+    "$CTR_ENGINE" run \
         --rm \
         --tty \
         --replace \
-        --name=t2linux-debian_buildah \
+        --name="${IMG_NAME}_buildah" \
         --env-file="$ROOT_DIR/.env" \
         --net=host \
         --security-opt label=disable \
         --security-opt seccomp=unconfined \
         --device /dev/fuse:rw \
         -v "$CTR_OUT_DIR":/var/lib/containers:Z \
-        -v "$SCRIPTS_DIR":/mnt:Z \
+        -v "$ROOT_DIR":/mnt:Z \
         stable \
-        /bin/bash /mnt/buildah-build.bash
+        /bin/bash /mnt/scripts/buildah-build.bash
 }
-run_containerized_build
