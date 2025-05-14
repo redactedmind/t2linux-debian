@@ -58,3 +58,4 @@ run_containerized_build() {
         stable \
         /bin/bash /mnt/scripts/buildah-build.bash
 }
+run_containerized_build
