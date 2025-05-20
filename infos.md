@@ -43,3 +43,30 @@ elevation from sh to bash is intentional (has better functionality), as also the
 
 ### Ubuntu?
 
+### `.env` Variables
+All of them could be overwritten
+- ```bash
+  TGT_DISTRO="debian"
+  TGT_RELEASE="bookworm"
+  ```
+  `TGT_DISTRO` and `TGT_RELEASE` determine the distro and release of the container base image that is used for target builder container (the one that compiles linux kernel, it should match the distro on which the kernel will be used).
+  These variables are also used in: 
+  - ```bash
+    # Container Image
+    TGT_CTR_IMG_NAME="t2linux-debian-builder_${TGT_DISTRO}-${TGT_RELEASE}"
+    ```
+  - Branch (and tag?) name of the kernel source for specific distro
+- ```bash
+  ## Override Build Container Base Image
+  # TGT_CTR_BASE_IMG_NAME="debian"
+  # TGT_CTR_BASE_IMG_TAG="bookworm-20250428"
+  ```
+  These variables are used to overwrite 
+
+## Buildah scripts
+
+install software
+
+## readme
+
+- describe building pipeline (containerized build, buildah container, target (builder) container)
