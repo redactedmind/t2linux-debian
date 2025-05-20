@@ -17,6 +17,7 @@ fi
 set -eu
 
 # Used by lib_msg.sh for context in messages # shellcheck disable=SC2034
+# shellcheck disable=SC2034
 SCRIPT_NAME="${0##*/}" 
 SCRIPTS_DIR="${0%/*}"
 LIBS_DIR="$SCRIPTS_DIR/libs"
@@ -41,19 +42,19 @@ chk_env_vars() {
         # Set BUILDAH_CTR_TAG to its environment value, or the default if it was unset/empty.
         BUILDAH_CTR_TAG="${BUILDAH_CTR_TAG:-v1.39.3}"
     else
-        die 1 "Invalid value for NO_BUILDAH_CTR: '${NO_BUILDAH_CTR}'. Must be 'true', 'false', '1', '0', or unset."
+        die 1 "Invalid value for NO_BUILDAH_CTR: \"${NO_BUILDAH_CTR}\". Must be 'true', 'false', or unset ()."
     fi
 }
 chk_env_vars
 
-# Check if IMG_NAME is unset or empty
-if [ -z "${IMG_NAME:-}" ]; then
-    die 1 "IMG_NAME environment variable is not set or empty. Please set it before running."
+# Check if TGT_CTR_IMG_NAME is unset or empty
+if [ -z "${TGT_CTR_IMG_NAME:-}" ]; then
+    die 1 "TGT_CTR_IMG_NAME environment variable is not set or empty. Please set it before running."
 fi
 
 
 get_ctr_engine() {
-    msg 'Finding required software'
+    msg 'Detecting container engine'
     if command -v podman >/dev/null; then
         CTR_ENGINE="podman"
     elif command -v docker >/dev/null; then
@@ -64,20 +65,33 @@ get_ctr_engine() {
 }
 get_ctr_engine
 
-get_buildah() {
-    true # Placeholder for future buildah logic if not using pre-built container
+# if NO_BUILDAH_CTR is true, we are on host and we need to check dependencies
+chk_ctr_build_cmds() {
+    msg 'Detecting container build software' # All the software required for buildah-build.bash 
+    for _cmd in buildah awk; do
+        if ! command -v $_cmd >/dev/null; then
+            err "$_cmd was not found"
+            _cmd_not_found='true'
+        fi
+    done
+    if [ -z "${_cmd_not_found:-}" ]; then
+        die 1 "Some of container build software was not found"
+    fi
 }
+if [ "${NO_BUILDAH_CTR}" = 'true' ]; then
+    chk_ctr_build_cmds
+fi
 
 run_containerized_build() {
-    msg 'Building builah container'
+    msg 'Building buildah container'
     mkdir -p "$CTR_OUT_DIR"
 
-    _build_container_name="${IMG_NAME}_buildah"
+    _build_container_name="${TGT_CTR_IMG_NAME}_buildah"
     _found_name=$("$CTR_ENGINE" ps -a --filter "name=^${_build_container_name}$" --format '{{.Names}}' 2>/dev/null)
 
     if [ "$_found_name" = "$_build_container_name" ]; then
         _user_wants_to_replace=false
-        _prompt_text="Container '${_build_container_name}' already exists. Replace it? [y/N]: "
+        _prompt_text="Container '${_build_container_name}' already exists. Do you want to replace it? [y/N]: "
         _tries=0
         while [ "$_tries" -lt 3 ]; do
             warn -n "${_prompt_text}"
@@ -102,6 +116,7 @@ run_containerized_build() {
         done
 
         if $_user_wants_to_replace; then
+            # warn "" # Add additional foolproof? (replacing existing container would delete the former one)
             msg "Removing existing container '${_build_container_name}'..."
             if ! "$CTR_ENGINE" rm "${_build_container_name}"; then
                 die 1 "Failed to remove existing container '${_build_container_name}'. Aborting."
@@ -112,9 +127,27 @@ run_containerized_build() {
         fi
     fi
 
-    "$CTR_ENGINE" pull "docker://quay.io/buildah/stable:$BUILDAH_CTR_TAG"
+    _buildah_img_tag="docker://quay.io/buildah/stable:$BUILDAH_CTR_TAG"
 
+    "$CTR_ENGINE" pull "$_buildah_img_tag"
+    
     # --- Execute Build Script in Container ---
+
+    msg "Running containerized build with $CTR_ENGINE (image $_buildah_img_tag)..."
+    echo "$CTR_ENGINE" run \
+        --rm \
+        --tty \
+        --name="$_build_container_name" \
+        --env-file="${ROOT_DIR}/.env" \
+        --net=host \
+        --security-opt label=disable \
+        --security-opt seccomp=unconfined \
+        --device /dev/fuse:rw \
+        -v "${CTR_OUT_DIR}:/var/lib/containers:Z" \
+        -v "${ROOT_DIR}:/mnt:Z" \
+        "$_buildah_img_tag" \
+        /bin/bash /mnt/scripts/buildah-build.bash
+
     # The following options are used for the container run:
     #   --rm: Remove the container automatically when it exits.
     #   --tty: Allocate a pseudo-TTY.
@@ -130,20 +163,10 @@ run_containerized_build() {
     #     ':Z' manages SELinux labels for shared volumes.
     #   stable: The image name (referring to quay.io/buildah/stable).
     #   /bin/bash /mnt/scripts/buildah-build.bash: The command to run inside the container.
-
-    msg "Running containerized build with $CTR_ENGINE (image: quay.io/buildah/stable:$BUILDAH_CTR_TAG)..."
-    "$CTR_ENGINE" run \
-        --rm \
-        --tty \
-        --name="${_build_container_name}" \
-        --env-file="${ROOT_DIR}/.env" \
-        --net=host \
-        --security-opt label=disable \
-        --security-opt seccomp=unconfined \
-        --device /dev/fuse:rw \
-        -v "${CTR_OUT_DIR}:/var/lib/containers:Z" \
-        -v "${ROOT_DIR}:/mnt:Z" \
-        stable \
-        /bin/bash /mnt/scripts/buildah-build.bash
 }
-run_containerized_build
+
+if [ "$NO_BUILDAH_CTR" = 'true' ]; then
+    die 0 "Target container builds on host are not yet implemented" # TODO implement this
+else
+    run_containerized_build
+fi
