@@ -134,11 +134,10 @@ run_containerized_build() {
     # --- Execute Build Script in Container ---
 
     msg "Running containerized build with $CTR_ENGINE (image $_buildah_img_tag)..."
-    echo "$CTR_ENGINE" run \
+    "$CTR_ENGINE" run \
         --rm \
         --tty \
         --name="$_build_container_name" \
-        --env-file="${ROOT_DIR}/.env" \
         --net=host \
         --security-opt label=disable \
         --security-opt seccomp=unconfined \
@@ -148,11 +147,10 @@ run_containerized_build() {
         "$_buildah_img_tag" \
         /bin/bash /mnt/scripts/buildah-build.bash
 
-    # The following options are used for the container run:
+    ## The following options are used for the container run:
     #   --rm: Remove the container automatically when it exits.
     #   --tty: Allocate a pseudo-TTY.
     #   --name="${_build_container_name}": Assign a name to the container.
-    #   --env-file="${ROOT_DIR}/.env": Load environment variables from the .env file.
     #   --net=host: Use the host's network stack (less isolation, but often needed for builds).
     #   --security-opt label=disable: Disable SELinux separation (reduces security, may be needed for Buildah).
     #   --security-opt seccomp=unconfined: Disable seccomp filtering (reduces security, grants more syscalls).
@@ -163,6 +161,10 @@ run_containerized_build() {
     #     ':Z' manages SELinux labels for shared volumes.
     #   stable: The image name (referring to quay.io/buildah/stable).
     #   /bin/bash /mnt/scripts/buildah-build.bash: The command to run inside the container.
+    #
+    ## Note on --env-file
+    # The usual `docker run` workflow isn't used here, the --env-file option doesn't strip double quotes ("") and other similar shell syntax. 
+    # The .env file is sourced inside the target script (started by `docker run`).
 }
 
 if [ "$NO_BUILDAH_CTR" = 'true' ]; then

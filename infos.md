@@ -70,3 +70,6 @@ install software
 ## readme
 
 - describe building pipeline (containerized build, buildah container, target (builder) container)
+
+## buildah build
+the scripts arent meant to be cedited by user, thus they wont be invalidated

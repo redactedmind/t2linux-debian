@@ -1,16 +1,18 @@
 #!/bin/bash
 
-# echo "hello world"
-# exit
-
 set -euo pipefail
 
 # shellcheck disable=SC2034
 SCRIPT_NAME="${BASH_SOURCE##*/}"
 SCRIPTS_DIR="${BASH_SOURCE%/*}"
 LIBS_DIR="$SCRIPTS_DIR/libs"
-ROOT_DIR="$SCRIPTS_DIR/.." # Root repo directory
+ROOT_DIR="$(readlink -f "$SCRIPTS_DIR/..")" # Root repo directory
 
+IN_CTR_ROOT_DIR="/mnt"
+IN_CTR_SCRIPTS_DIR="$IN_CTR_ROOT_DIR/scripts"
+IN_CTR_BUILDAH_SCRIPTS_DIR="$IN_CTR_SCRIPTS_DIR/buildah"
+
+source "$ROOT_DIR/.env"
 source "$LIBS_DIR/lib_msg.sh"
 
 case "$TGT_DISTRO" in
@@ -33,26 +35,25 @@ esac
 
 msg "Starting to build target (builder) container"
 msg "Trying to peform FROM"
-ctr="$(buildah from "$BASE_IMG_NAME:$BASE_IMG_TAG")"
-if $?; then
+CTR_NAME="$(buildah from "$BASE_IMG_NAME:$BASE_IMG_TAG")" || \
     die 1 "Could not find base image with name BASE_IMG_NAME=\"$BASE_IMG_NAME\" and tag BASE_IMG_TAG=\"$BASE_IMG_TAG\""
-fi
-# # Set noninteractive environment for apt
-# buildah config --env DEBIAN_FRONTEND=noninteractive "$ctr"
 
-# # Install package dependencies
-# buildah run "$ctr" bash ./"$SCRIPTS_DIR"/
+msg "Installing packages"
+buildah run \
+    --mount "type=bind,source=$ROOT_DIR,destination=$IN_CTR_ROOT_DIR" \
+    --env CTR_PKGS="$CTR_PKGS" \
+    "$CTR_NAME" \
+    bash "$IN_CTR_BUILDAH_SCRIPTS_DIR/install-packages.bash"
 
-# # Set working directory
-# buildah config --workingdir /root/work "$ctr"
+exit
 
-# # Copy and make build script executable
-# buildah copy "$ctr" "build_kernel.sh" "/usr/local/bin/"
-# buildah run "$ctr" -- chmod +x /usr/local/bin/build_kernel.sh
+msg "Creating and setting workdir"
+buildah run "$CTR_NAME" mkdir "$TGT_CTR_WORK_DIR"
+buildah config --workingdir "$TGT_CTR_WORK_DIR" "$CTR_NAME"
 
-# # Configure entrypoint
-# buildah config --entrypoint '["/usr/local/bin/build_kernel.sh"]' "$ctr"
+msg "Configuring entrypoint"
+buildah config --entrypoint '["/bin/bash"]' "$CTR_NAME"
 
-# # Commit the final image
-# buildah commit "$ctr" "$IMG_NAME:$IMG_TAG"
+msg "Committing the final image"
+buildah commit "$CTR_NAME" "$TGT_CTR_IMG_NAME:$TGT_CTR_IMG_TAG"
 
