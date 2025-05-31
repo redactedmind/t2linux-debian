@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_NAME="${BASH_SOURCE##*/}"
 SCRIPTS_DIR="${BASH_SOURCE%/*}"
 LIBS_DIR="$SCRIPTS_DIR/libs"
+# TODO check if readlink fails
 ROOT_DIR="$(readlink -f "$SCRIPTS_DIR/..")" # Root repo directory
 
 IN_CTR_ROOT_DIR="/mnt"
@@ -19,8 +20,8 @@ case "$TGT_DISTRO" in
     debian)
         case "$TGT_RELEASE" in
             bookworm | trixie | bullseye)
-                [[ -v BASE_IMG_NAME ]] || BASE_IMG_NAME="$TGT_DISTRO"
-                [[ -v BASE_IMG_TAG ]] || BASE_IMG_TAG="$TGT_RELEASE"
+                [[ -v TGT_CTR_BASE_IMG_NAME ]] || TGT_CTR_BASE_IMG_NAME="$TGT_DISTRO"
+                [[ -v TGT_CTR_BASE_IMG_TAG ]] || TGT_CTR_BASE_IMG_TAG="$TGT_RELEASE"
                 
                 ;;
             *)
@@ -35,8 +36,8 @@ esac
 
 msg "Starting to build target (builder) container"
 msg "Trying to peform FROM"
-CTR_NAME="$(buildah from "$BASE_IMG_NAME:$BASE_IMG_TAG")" || \
-    die 1 "Could not find base image with name BASE_IMG_NAME=\"$BASE_IMG_NAME\" and tag BASE_IMG_TAG=\"$BASE_IMG_TAG\""
+CTR_NAME="$(buildah from "$TGT_CTR_BASE_IMG_NAME:$TGT_CTR_BASE_IMG_TAG")" || \
+    die 1 "Could not find base image with name TGT_CTR_BASE_IMG_NAME=\"$TGT_CTR_BASE_IMG_NAME\" and tag TGT_CTR_BASE_IMG_TAG=\"$TGT_CTR_BASE_IMG_TAG\""
 
 msg "Installing packages"
 buildah run \
@@ -45,15 +46,19 @@ buildah run \
     "$CTR_NAME" \
     bash "$IN_CTR_BUILDAH_SCRIPTS_DIR/install-packages.bash"
 
-exit
-
 msg "Creating and setting workdir"
-buildah run "$CTR_NAME" mkdir "$TGT_CTR_WORK_DIR"
+buildah run "$CTR_NAME" mkdir -p "$TGT_CTR_WORK_DIR" # TODO check if -p is necessary
 buildah config --workingdir "$TGT_CTR_WORK_DIR" "$CTR_NAME"
 
 msg "Configuring entrypoint"
 buildah config --entrypoint '["/bin/bash"]' "$CTR_NAME"
 
 msg "Committing the final image"
-buildah commit "$CTR_NAME" "$TGT_CTR_IMG_NAME:$TGT_CTR_IMG_TAG"
+# Debug information
+# msg "DEBUG: TGT_CTR_BASE_IMG_NAME=$TGT_CTR_BASE_IMG_NAME"
+# msg "DEBUG: TGT_CTR_BASE_IMG_TAG=$TGT_CTR_BASE_IMG_TAG"
+# msg "DEBUG: TGT_CTR_IMG_NAME=$TGT_CTR_IMG_NAME"
+# msg "DEBUG: TGT_CTR_IMG_TAG=$TGT_CTR_IMG_TAG"
+# msg "DEBUG: Full image name:tag would be: $TGT_CTR_IMG_NAME:$TGT_CTR_IMG_TAG"
+buildah commit "$CTR_NAME" "$TGT_CTR_BASE_IMG_NAME:$TGT_CTR_BASE_IMG_TAG"
 
